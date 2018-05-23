@@ -244,7 +244,9 @@ op_store_data:
     /********** 8 **********/
 op_start_send_req:
     SPI_WRITE(SPI_OK_BYTE);
-    gpio_clear_tx_int();    // preemptive
+    if (can_tx_count>=2)
+        gpio_clear_tx_int();    // preemptive
+    //can_transmit_push_buffer();
     can_transmit_commit_buffer();
     return;
 

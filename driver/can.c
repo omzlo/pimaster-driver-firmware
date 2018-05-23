@@ -53,50 +53,59 @@ int can_filter_get(uint32_t filter_id, can_filter_t *finfo)
 }
 
 /********************/
+//uint8_t can_tx_queue[16*(CAN_TX_QUEUE_LENGTH+1)];
+//uint32_t can_tx_head;
+//uint32_t can_tx_tail;
 
 uint8_t can_tx_buffer[16];
+volatile int can_tx_count;
 
 int can_transmit_commit_buffer(void) 
 {
     uint32_t eid;
-    #define transmit_mailbox 0
+    uint32_t transmit_mailbox;
 
-    if (can_tx_buffer[0]!=13)
+    if (can_tx_count==3)
+        return -1;
+
+    __disable_irq();
+    can_tx_count++;
+    __enable_irq();
+
+
+    if (can_tx_count==3)
+    {
+        NOCAN_STATUS_SET(NOCAN_STATUS_TX_PENDING);
+        gpio_clear_tx_int();
+    }
+    else
     {
         gpio_set_tx_int();
-        return -1;
     }
 
-    NOCAN_STATUS_SET(NOCAN_STATUS_TX_PENDING);
+    if ((CAN->TSR&CAN_TSR_TME0) == CAN_TSR_TME0)
+    {
+        transmit_mailbox = 0;
+    }
+    else if ((CAN->TSR&CAN_TSR_TME1) == CAN_TSR_TME1)
+    {
+        transmit_mailbox = 1;
+    }
+    else if ((CAN->TSR&CAN_TSR_TME2) == CAN_TSR_TME2)
+    {
+        transmit_mailbox = 2;
+    }
+    else
+    {
+        // should never happen!
+        return -1;
+    }
 
     eid = ((uint32_t)can_tx_buffer[1]<<24)
         | ((uint32_t)can_tx_buffer[2]<<16)
         | ((uint32_t)can_tx_buffer[3]<<8)
         | ((uint32_t)can_tx_buffer[4])
         ;
-
-    /*** KEEP ***
-    if ((CANx->TSR&CAN_TSR_TME0) == CAN_TSR_TME0)
-    {
-        transmit_mailbox = 0;
-    }
-    else if ((CANx->TSR&CAN_TSR_TME1) == CAN_TSR_TME1)
-    {
-        transmit_mailbox = 1;
-    }
-    else if ((CANx->TSR&CAN_TSR_TME2) == CAN_TSR_TME2)
-    {
-        transmit_mailbox = 2;
-    }
-    else
-    {
-        return -1;
-    }
-    *** KEEP ***/
-
-    // check if transmit mailbox 0 is avaiable
-    if ((CAN->TSR&CAN_TSR_TME0) != CAN_TSR_TME0)
-        return -1;
 
     CAN->sTxMailBox[transmit_mailbox].TIR = (eid<<3) | (1<<2); 
         // (1<<2) means extended id, eid is shifted left by 3
@@ -121,8 +130,17 @@ int can_transmit_commit_buffer(void)
     return 0;
 }
 
+static inline int _can_transmit_release_buffer(void)
+{
+    __disable_irq();
+    can_tx_count--;
+    gpio_set_tx_int();
+    NOCAN_STATUS_CLEAR(NOCAN_STATUS_TX_PENDING); 
+    // gpio_set_tx_int(); is done by NOCAN_STATUS_CLEAR
+    return 0;
+}
+
 /********************/
-#define CAN_RX_QUEUE_LENGTH 15
 uint8_t can_rx_queue[16*(CAN_RX_QUEUE_LENGTH+1)];
 uint32_t can_rx_head;
 uint32_t can_rx_tail;
@@ -151,14 +169,6 @@ int can_receive_shift_buffer(void)
 
 static inline uint8_t *_can_receive_tail_buffer(void)
 {
-    /*
-    uint32_t next = (can_rx_tail+1) & CAN_RX_QUEUE_LENGTH;
-
-    if (next == can_rx_head)    // full ?
-    {
-        return (uint8_t *)0;
-    }
-    */
     return can_rx_queue+(16*can_rx_tail);
 }
 
@@ -231,9 +241,20 @@ void CEC_CAN_IRQHandler(void)
 
     if((CAN->TSR & CAN_TSR_RQCP0)!=0) /* check if request completed for mailbox 0 */
     {
-        NOCAN_STATUS_CLEAR(NOCAN_STATUS_TX_PENDING);
-        gpio_set_tx_int();
+        _can_transmit_release_buffer(); 
         CAN->TSR |= CAN_TSR_RQCP0; // release flag
+    } 
+    
+    if((CAN->TSR & CAN_TSR_RQCP1)!=0) /* check if request completed for mailbox 1 */
+    {
+        _can_transmit_release_buffer(); 
+        CAN->TSR |= CAN_TSR_RQCP1; // release flag
+    } 
+
+    if((CAN->TSR & CAN_TSR_RQCP2)!=0) /* check if request completed for mailbox 2 */
+    {
+        _can_transmit_release_buffer(); 
+        CAN->TSR |= CAN_TSR_RQCP2; // release flag
     } 
 }
 
@@ -257,6 +278,11 @@ int can_init(void)
     can_rx_head = 0;
     can_rx_tail = 0;
     can_rx_buffer = can_rx_queue;
+
+    //can_tx_head = 0;
+    //can_tx_tail = 0;
+    //can_tx_buffer = can_tx_queue;
+    can_tx_count = 0;
 
     /* REMAP PINS, Only for STM32F042 TSSOP20 */
     // RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN;
@@ -291,6 +317,10 @@ int can_init(void)
      * bits have been monitored.
      */
     CAN->MCR |= CAN_MCR_ABOM;
+
+    /* Transmit FIFO priority  driven by the request order (chronologically)
+     */
+    CAN->MCR |= CAN_MCR_TXFP;
 
 #ifdef USE_FASTER_CAN
 
