@@ -4,6 +4,7 @@
 #include "gpio.h"
 #include "can.h"
 #include "spi_slave.h"
+#include "version.h"
 
 nocan_registers_t NOCAN_REGS;
 
@@ -20,8 +21,8 @@ void nocan_init(void)
     NOCAN_REGS.SIGNATURE[1] = 'A';
     NOCAN_REGS.SIGNATURE[2] = 'N';
     NOCAN_REGS.SIGNATURE[3] = '0';
-    NOCAN_REGS.VERSION_MAJOR = 0;
-    NOCAN_REGS.VERSION_MINOR = 1;
+    NOCAN_REGS.VERSION_MAJOR = PIMASTER_VERSION_MAJOR;
+    NOCAN_REGS.VERSION_MINOR = PIMASTER_VERSION_MINOR;
     for (i=0;i<12;i++) NOCAN_REGS.CHIP_UDID[i]=CHIP_UDID[i];
     NOCAN_REGS.GUARD = 0xBEEF;
 
