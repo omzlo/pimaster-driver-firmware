@@ -90,7 +90,7 @@ void SPI1_IRQHandler(void)
         &&op_fetch_data,        // 9 
         &&op_recv_ack,          // 10
         &&op_set_current_limit, // 11
-        &&op_null,              // 12
+        &&op_bootloader_mode,   // 12
         &&op_null,              // 13
         &&op_null,              // 14
         &&op_null,              // 15
@@ -108,7 +108,7 @@ void SPI1_IRQHandler(void)
         &&op_start_fetch_data,          // 9 
         &&op_start_recv_ack,            // 10
         &&op_start_set_current_limit,   // 11
-        &&op_start_null,                // 12
+        &&op_start_bootloader_mode,     // 12
         &&op_start_null,                // 13
         &&op_start_null,                // 14
         &&op_start_null,                // 15
@@ -116,11 +116,11 @@ void SPI1_IRQHandler(void)
 
 
 
-    if ((SPI1->SR & SPI_SR_RXNE) == SPI_SR_RXNE)
-    {
+    //if ((SPI1->SR & SPI_SR_RXNE) == SPI_SR_RXNE)
+    //{
         if (offset < 0)
         {
-            opcode = SPI_READ();
+            opcode = SPI_READ() & 15;
             offset = 0;
             goto *start_jump_table[opcode];
         }
@@ -130,8 +130,8 @@ void SPI1_IRQHandler(void)
             offset++; 
             goto *jump_table[opcode];
         }
-    }
-    return;
+    //}
+    //return;
 
     /********** 0 **********/
 op_start_null:      
@@ -295,6 +295,24 @@ op_set_current_limit:
     }
     SPI_WRITE(SPI_ERR_BYTE);
     return;
+    
+    /********** 12 ***********/
+op_start_bootloader_mode:
+    SPI_WRITE(SPI_MORE_BYTE);
+    return;
+
+op_bootloader_mode:
+    if (offset==1) {
+        if (param == 0x17)
+        {
+            SPI_WRITE(SPI_OK_BYTE);
+            rtc_backup_write(0, 0xdeadbeef);
+            NVIC_SystemReset();
+            return;
+        }
+    }
+    SPI_WRITE(SPI_ERR_BYTE);
+    return; 
 }
 
 

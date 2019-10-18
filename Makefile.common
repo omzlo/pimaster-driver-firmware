@@ -23,6 +23,7 @@ CC=arm-none-eabi-gcc
 LD=arm-none-eabi-gcc
 AR=arm-none-eabi-ar
 AS=arm-none-eabi-as
+SIZE=arm-none-eabi-size
 OBJCOPY=arm-none-eabi-objcopy
 
 # Code Paths
@@ -43,11 +44,9 @@ vpath %.c $(DEVICE)
 
 #  Processor specific
 
-#PTYPE = STM32F0XX_MD
-PTYPE = STM32F042
-LDSCRIPT = $(TEMPLATEROOT)/stm32f0xx.ld
-#STARTUP=  startup_stm32f0xx.o system_stm32f0xx.o 
-STARTUP=  startup_stm32f0xx.o
+PTYPE= STM32F042
+LDSCRIPT= $(TEMPLATEROOT)/stm32f0xx-$(notdir $(CURDIR)).ld 
+STARTUP= startup_stm32f0xx.o
 
 # Compilation Flags
 
@@ -82,6 +81,15 @@ bin:	$(BIN)
 
 debug:	$(ELF)
 	arm-none-eabi-gdb -iex "target extended-remote localhost:4242" $(ELF)
+
+
+size:		$(ELF)
+	$(SIZE) $<
+
+flash:	$(BIN)
+	st-flash write $(BIN) 0x8000000
+
+
 # pull in dependencies
 
 -include $(OBJS:.o=.d)

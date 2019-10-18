@@ -6,6 +6,7 @@
 #include "can.h"
 #include "nocan.h"
 #include "adc.h"
+#include "rtc_backup.h"
 
 void dump_regs()
 {
@@ -31,6 +32,7 @@ int main(void)
   int i;
 
   systick_init();
+  rtc_backup_init();
 
   usart_init(115200);  
   usart_printf("\nStarting:\n");
@@ -39,15 +41,15 @@ int main(void)
   gpio_init();
   usart_printf("[OK]\n");
 
-  usart_printf("* 3 second pause: ");
-  for (i=0;i<6;i++)
+  usart_printf("* 2 second pause: ");
+  for (i=0;i<5;i++)
   {
     gpio_set_red_led();
     gpio_clear_yellow_led();
-    systick_delay(250);
+    systick_delay(200);
     gpio_clear_red_led();
     gpio_set_yellow_led();
-    systick_delay(250);
+    systick_delay(200);
     usart_putc('.');
   }
   gpio_clear_yellow_led();
